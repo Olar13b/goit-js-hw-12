@@ -1,69 +1,96 @@
-import { fetchImages } from "./js/pixabay-api.js";
-import { renderGallery } from "./js/render-functions.js";
-import iziToast from "izitoast";
-import "izitoast/dist/css/iziToast.min.css";
+import iziToast from 'izitoast';
+import 'izitoast/dist/css/iziToast.min.css';
 
-const form = document.querySelector("#form");
-const gallery = document.querySelector(".gallery");
-const loadMoreBtn = document.querySelector("#load-more");
-const loader = document.querySelector(".loader");
+import { getImagesByQuery } from './js/pixabay-api.js';
+import {
+  createGallery,
+  clearGallery,
+  showLoader,
+  hideLoader,
+  hideLoadMoreButton,
+  showLoadMoreButton,
+} from './js/render-functions.js';
 
-let query = "";
+const form = document.querySelector('.form');
+const loadMoreBtn = document.querySelector('.load-more');
+
+let query;
 let page = 1;
-const perPage = 40;
-let lastItemBeforeLoad = null;
+const perPage = 15;
 
-form.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    query = event.target.elements.searchQuery.value.trim();
+form.addEventListener('submit', e => {
+  e.preventDefault();
 
-    if (!query) {
-        iziToast.warning({ title: "Warning", message: "Please enter a search term!" });
-        return;
-    }
+  hideLoadMoreButton();
 
-    page = 1;
-    gallery.innerHTML = "";
-    loadMoreBtn.classList.add("hidden");
-    loader.classList.remove("hidden");
+  clearGallery();
 
-    const { hits, totalHits } = await fetchImages(query, page, perPage);
-    loader.classList.add("hidden");
+  query = e.target.elements['search-text'].value.trim();
 
-    if (hits.length === 0) {
-        iziToast.error({ message: "No images found. Try again!" });
-        return;
-    }
+  if (!query) return;
 
-    renderGallery(hits);
+  page = 1;
 
-    if (perPage < totalHits) {
-        loadMoreBtn.classList.remove("hidden");
-    }
+  showImages(query);
 });
 
-loadMoreBtn.addEventListener("click", async () => {
-    lastItemBeforeLoad = document.querySelector(".gallery-item:last-of-type");
+loadMoreBtn.addEventListener('click', e => {
+  hideLoadMoreButton();
 
-    page += 1;
-    loader.classList.remove("hidden");
+  page++;
 
-    const { hits, totalHits } = await fetchImages(query, page, perPage);
-    loader.classList.add("hidden");
+  showImages(query);
 
-    renderGallery(hits, true);
-
-    setTimeout(() => {
-        if (lastItemBeforeLoad) {
-            const firstNewItem = lastItemBeforeLoad.nextElementSibling;
-            if (firstNewItem) {
-                firstNewItem.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-        }
-    }, 300);
-
-    if (page * perPage >= totalHits) {
-        loadMoreBtn.classList.add("hidden");
-        iziToast.info({ message: "We're sorry, but you've reached the end of search results." });
-    }
+  scrollView();
 });
+
+async function showImages(query) {
+  showLoader();
+
+  try {
+    const data = await getImagesByQuery(query, page, perPage);
+    const images = data.hits;
+
+    if (images && images.length > 0) {
+      createGallery(images);
+
+      if (page >= Math.ceil(data.totalHits / perPage)) {
+        iziToast.show({
+          title: 'ℹ️',
+          message: "We're sorry, but you've reached the end of search results.",
+          messageColor: 'white',
+          titleColor: 'white',
+          backgroundColor: '#4CAF50',
+          position: 'topRight',
+        });
+      } else {
+        showLoadMoreButton();
+      }
+    } else {
+      iziToast.show({
+        title: '❌',
+        message: `Sorry, there are no images matching your search query. Please try again!`,
+        messageColor: 'white',
+        titleColor: 'white',
+        backgroundColor: '#ef4040',
+        position: 'topRight',
+      });
+    }
+  } catch (err) {
+    console.error(err);
+  } finally {
+    hideLoader();
+  }
+}
+
+function scrollView() {
+  const galleryItem = document.querySelector('.gallery-item');
+  if (!galleryItem) return;
+  setTimeout(() => {
+    scrollBy({
+      top: galleryItem.getBoundingClientRect().height * 2,
+      left: 0,
+      behavior: 'smooth',
+    });
+  }, 200);
+}
